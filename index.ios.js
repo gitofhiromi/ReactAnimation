@@ -4,81 +4,231 @@
  * @flow
  */
 
-import React, {
+'use strict';
+
+var React = require('react-native');
+var {
     AppRegistry,
-    Component,
-    Image,
-    ListView,
     StyleSheet,
     Text,
     View,
-    } from 'react-native';
+    ScrollView,
+    TouchableOpacity,
+    Image,
+    PanResponder,
+    } = React;
 
-var API_KEY = '7waqfqbprs7pajbz28mqf6vz';
-var API_URL = 'http://api.rottentomatoes.com/api/public/v1.0/lists/movies/in_theaters.json';
-var PAGE_SIZE = 25;
-var PARAMS = '?apikey=' + API_KEY + '&page_limit=' + PAGE_SIZE;
-var REQUEST_URL = API_URL + PARAMS;
+var rebound = require('rebound');
+var precomputeStyle = require('precomputeStyle');
+var clamp = require('clamp');
 
-class AwesomeProject extends Component {
-    componentWillMount() {  // Animate creation
-        LayoutAnimation.spring();
-    }
+var deviceWidth = require('Dimensions').get('window').width;
 
-    getInitialState() {
-        return { w: 100, h: 100 }
-    }
-
-    _onPress() {  // Animate the update
-        LayoutAnimation.spring();
-        this.setState({w: this.state.w + 15, h: this.state.h + 15})
-    }
-
-    render: function() {
+var ReactPage = React.createClass({
+    render() {
     return (
-        <View style={styles.container}>
-            <View style={[styles.box, {width: this.state.w, height: this.state.h}]} />
-            <TouchableOpacity onPress={this._onPress}>
-                <View style={styles.button}>
-                    <Text style={styles.buttonText}>Press me!</Text>
-                </View>
-            </TouchableOpacity>
-        </View> );
+    <ScrollView>
+        <Image source={{uri: "http://sc5.io/blog/wp-content/uploads/2014/06/react.png"}}
+            style={{flex: 1, height: 320}} resizeMode="cover" />
+        <Text>
+            JUST THE UI Lots of people use React as the V in MVC. Since React makes no assumptions about the rest of your technology stack, it's easy to try it out on a small feature in an existing project. VIRTUAL DOM React abstracts away the DOM from you, giving a simpler programming model and better performance. React can also render on the server using Node, and it can power native apps using React Native. DATA FLOW React implements one-way reactive data flow which reduces boilerplate and is easier to reason about than traditional data binding.
+        </Text>
+        <Image source={{uri: "http://sc5.io/blog/wp-content/uploads/2014/06/react.png"}}
+            style={{flex: 1, height: 320}} resizeMode="cover" />
+    </ScrollView>
+    )
     }
-}
+})
+
+var FlowPage = React.createClass({
+    render() {
+    return (
+    <ScrollView>
+    <Image source={{uri: "http://www.adweek.com/socialtimes/files/2014/11/FlowLogo650.jpg"}}
+    style={{flex: 1, height: 320}} resizeMode="contain" />
+
+    <Image source={{uri: "http://www.adweek.com/socialtimes/files/2014/11/FlowLogo650.jpg"}}
+    style={{flex: 1, height: 320}} resizeMode="contain" />
+
+    <Image source={{uri: "http://www.adweek.com/socialtimes/files/2014/11/FlowLogo650.jpg"}}
+    style={{flex: 1, height: 320}} resizeMode="contain" />
+    </ScrollView>
+    )
+    }
+})
+
+var JestPage = React.createClass({
+    render() {
+    return (
+    <ScrollView>
+    <Image source={{uri: "http://facebook.github.io/jest/img/opengraph.png"}}
+    style={{flex: 1, height: 320}} resizeMode="cover" />
+    <Image source={{uri: "http://facebook.github.io/jest/img/opengraph.png"}}
+    style={{flex: 1, height: 320}} resizeMode="cover" />
+    <Image source={{uri: "http://facebook.github.io/jest/img/opengraph.png"}}
+    style={{flex: 1, height: 320}} resizeMode="cover" />
+    </ScrollView>
+    )
+    }
+})
+
+var ScrollableTabView = React.createClass({
+    getInitialState() {
+        return {offsetX: 0,}
+    },
+
+    componentDidMount() {
+        this._scrollSpring.setCurrentValue(0);
+    },
+
+    componentWillMount() {
+        this.currentPage = 0;
+
+        // Initialize the spring that will drive animations
+        this.springSystem = new rebound.SpringSystem();
+        this._scrollSpring = this.springSystem.createSpring();
+        var springConfig = this._scrollSpring.getSpringConfig();
+        springConfig.tension = rebound.OrigamiValueConverter.tensionFromOrigamiValue(25);
+        springConfig.friction = rebound.OrigamiValueConverter.frictionFromOrigamiValue(8);
+        this._scrollSpring.setOvershootClampingEnabled(false);
+
+        this._scrollSpring.addListener({
+            onSpringUpdate: () => {
+                if (!this.scrollView || !this.tabUnderline) { return }
+
+                var numberOfTabs = this.props.children.length;
+                var currentValue = this._scrollSpring.getCurrentValue();
+                var offsetX = deviceWidth * currentValue;
+
+                this.scrollView.setNativeProps(precomputeStyle({
+                    transform: [{translateX: -1 * offsetX}],
+                }));
+
+                this.tabUnderline.setNativeProps(precomputeStyle({
+                    left: offsetX / numberOfTabs
+                }));
+            },
+        });
+
+        this._panResponder = PanResponder.create({
+            // Claim responder if it's a horizontal pan
+            onMoveShouldSetPanResponder: (e, gestureState) => {
+                if (Math.abs(gestureState.dx) > Math.abs(gestureState.dy)) {
+                    return true;
+                }
+            },
+
+            // Touch is released, scroll to the one that you're closest to
+            onPanResponderRelease: (e, gestureState) => {
+                var relativeGestureDistance = gestureState.dx / deviceWidth,
+                    lastPageIndex = this.props.children.length - 1,
+                    vx = gestureState.vx;
+
+                if (this.currentPage != lastPageIndex && (relativeGestureDistance < -0.5 || (relativeGestureDistance < 0 && vx <= 0.5))) {
+                    this.currentPage = this.currentPage + 1;
+                } else if (this.currentPage != 0 && (relativeGestureDistance > 0.5 || (relativeGestureDistance > 0 && vx >= 0.5))) {
+                    this.currentPage = this.currentPage - 1;
+                }
+
+                this._scrollSpring.setEndValue(this.currentPage);
+            },
+
+            // Dragging, move the view with the touch
+            onPanResponderMove: (e, gestureState) => {
+                var dx = gestureState.dx;
+                var lastPageIndex = this.props.children.length - 1;
+
+                if (this.currentPage == 0 && dx > 0) {
+                    // Don't set the spring if we're on the first page and trying to move before it
+                } else if (this.currentPage == lastPageIndex && dx < 0) {
+                    // Don't set the spring if we're already on the last page and trying to move to the next
+                } else {
+                    // This is awkward because when we are scrolling we are offsetting the underlying view
+                    // to the left (-x)
+                    var offsetX = dx - (this.currentPage * deviceWidth);
+                    this._scrollSpring.setCurrentValue(-1 * offsetX / deviceWidth);
+                }
+            },
+        });
+    },
+
+    goToPage(pageNumber) {
+        this._scrollSpring.setEndValue(pageNumber);
+        this.props.onChangeTab &&
+        this.props.onChangeTab({i: pageNumber, ref: this.props.children[pageNumber]});
+    },
+
+    renderTabOption(name, page) {
+        return (
+        <TouchableOpacity key={name} onPress={() => this.goToPage(page)}>
+        <View style={styles.tab}>
+        <Text>{name}</Text>
+        </View>
+        </TouchableOpacity>
+        );
+},
+
+render() {
+    var numberOfTabs = this.props.children.length;
+    var tabUnderlineStyle = {
+        position: 'absolute',
+        width: deviceWidth / numberOfTabs,
+        height: 4, backgroundColor: 'blue', bottom: 0,
+    }
+    var sceneContainerStyle = {
+        width: deviceWidth * this.props.children.length,
+        flex: 1, flexDirection: 'row'
+    }
+
+    return (
+    <View style={{flex: 1}}>
+    <View style={styles.tabs}>
+    {this.props.children.map((child, i) => this.renderTabOption(child.key, i))}
+    <View style={tabUnderlineStyle}
+    ref={view => { this.tabUnderline = view; }} />
+    </View>
+
+    <View style={sceneContainerStyle} {...this._panResponder.panHandlers}
+    ref={view => { this.scrollView = view; }}>
+    {this.props.children}
+    </View>
+    </View>
+    )
+    }
+});
+
+
+var ScrollFun = React.createClass({
+    render() {
+        return (
+        <ScrollableTabView>
+        <ReactPage key="React" />
+        <FlowPage key="Flow" />
+        <JestPage key="Jest" />
+        </ScrollableTabView>
+        );
+    }
+});
 
 var styles = StyleSheet.create({
-    container: {
+    tab: {
         flex: 1,
-        flexDirection: 'row',
-        justifyContent: 'center',
         alignItems: 'center',
-        backgroundColor: '#F5FCFF',
+        justifyContent: 'center',
+        paddingBottom: 10,
     },
 
-    rightContainer: {
-        flex: 1,
-    },
-
-    title: {
-        fontSize: 20,
-        marginBottom: 8,
-        textAlign: 'center',
-    },
-
-    year: {
-        textAlign: 'center',
-    },
-
-    thumbnail: {
-        width: 53,
-        height: 81,
-    },
-
-    listView: {
-        paddingTop: 20,
-        backgroundColor: '#F5FCFF',
+    tabs: {
+        height: 50,
+        flexDirection: 'row',
+        marginTop: 20,
+        borderWidth: 1,
+        borderTopWidth: 0,
+        borderLeftWidth: 0,
+        borderRightWidth: 0,
+        borderBottomColor: '#ccc',
     },
 });
 
 AppRegistry.registerComponent('ReactTest', () => ReactTest);
+module.exports=ScrollFun;
